@@ -1,0 +1,32 @@
+{
+  "name": "fresherdemo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@primeuix/themes": "^2.0.2",
+    "floating-vue": "^5.2.2",
+    "pinia": "^3.0.4",
+    "primevue": "^4.5.4",
+    "tailwindcss-primeui": "^0.6.1",
+    "vee-validate": "^4.15.1",
+    "vue": "^3.5.24",
+    "vue-router": "^4.6.4",
+    "yup": "^1.7.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/node": "^24.10.1",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "^0.8.1",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vue-tsc": "^3.1.4"
+  }
+}

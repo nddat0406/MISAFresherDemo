@@ -1,0 +1,114 @@
+.ms-button {
+    transition: all .2s ease;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    outline: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    position: relative;
+    font-size: 13px;
+    height: 28px;
+    background-color: #fff;
+    font-weight: 500;
+}
+
+.ms-button.btn-outline-neutral:hover {
+    background-color: #f3f4f6;
+}
+
+.ms-button.btn-filled-neutral {
+    background-color: #f3f4f6;
+    color: #111827;
+    border: none;
+}
+
+.ms-button.btn-filled-neutral:hover {
+    background-color: #e5e7eb;
+}
+
+button:focus,
+button:focus-visible {
+    outline: none;
+}
+
+.ms-button.btn-text-neutral {
+    color: #111827;
+    border: none;
+    background-color: transparent;
+}
+
+.ms-button.btn-text-neutral:disabled {
+    cursor: not-allowed;
+    color: #7b7b7b;
+}
+
+.ms-button.btn-text-neutral:active {
+    border: none;
+    background-color: #e5e7eb;
+}
+
+.ms-button.btn-solid-brand {
+    background-color: #009b71;
+    color: #fff;
+    border: none;
+}
+
+.ms-button.btn-solid-brand:hover {
+    background-color: #007b5d;
+}
+
+.ms-button.btn-outline-success {
+    border: 1px solid #009b71;
+    color: #009b71;
+    background-color: #fff;
+}
+
+.ms-button.btn-outline-success:hover {
+    background-color: #dcfce7;
+}
+
+.ms-button.btn-outline-danger {
+    border: 1px solid #DC2626;
+    color: #dc2626;
+    background-color: #fff;
+}
+
+.ms-button.btn-outline-danger:hover {
+    background-color: #fee2e2;
+}
+
+.ms-button.btn-outline-neutral {
+    border: 1px solid #D1D5DB;
+    color: #111827;
+    background-color: #fff;
+}
+.ms-button.btn-solid-danger {
+    background-color: #dc2626;
+    color: #fff;
+    border: none;
+}
+.ms-button.only-icon {
+    padding: 6px 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+
+.feature-btn {
+    cursor: pointer;
+    transition: all ease .1s;
+    border-radius: 50%;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #fff;
+}
+
+.feature-btn:hover {
+    border-radius: 50%;
+}

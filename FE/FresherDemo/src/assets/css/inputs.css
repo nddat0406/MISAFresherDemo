@@ -1,0 +1,385 @@
+/* MISA Input Components Styles */
+
+/* Base Input Styles */
+.ms-input {
+    position: relative;
+    margin-bottom: 0;
+}
+
+.ms-input.ms-editor {
+    height: auto;
+}
+
+.ms-input-item {
+    background: #fff;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    line-height: 20px;
+    color: #111827;
+    padding: 0;
+    height: 100%;
+}
+
+.ms-input-item:disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.ms-input-item::placeholder {
+    color: #9ca3af;
+}
+
+.ms-input-item:focus {
+    outline: none;
+}
+
+/* Input Container */
+.input-container {
+    border-radius: 4px;
+    padding: 6px 10px;
+    min-height: 28px;
+    background: #fff;
+    transition: all 0.2s ease;
+}
+
+.input-container.border {
+    border: 1px solid #d1d5db;
+}
+
+.input-container:hover:not(.disabled) {
+    border-color: #9ca3af;
+}
+
+.input-container:focus-within:not(.disabled) {
+    border-color: #10b981;
+}
+
+.input-container.error {
+    border-color: #e54848 !important;
+}
+
+.input-container.disabled {
+    background-color: #f3f4f6;
+    cursor: not-allowed;
+    border-color: #d1d5db;
+}
+
+/* Label Styles */
+.label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #111827;
+    line-height: 20px;
+    white-space: nowrap;
+}
+
+.w-37\.5 {
+    width: 150px;
+}
+
+.w-43\.75 {
+    width: 175px;
+}
+
+/* Required Indicator */
+.ms-input-required,
+.ms-textarea-required,
+.ms-timepicker-required,
+.ms-datepicker-required {
+    color: #e54848;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* MISA Time Picker Styles */
+
+.ms-timepicker {
+    position: relative;
+}
+
+.ms-container--timepicker {
+    position: relative;
+    padding: 6px 10px;
+    gap: 8px;
+    align-items: center;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ms-container--timepicker.border {
+    border: 1px solid #d1d5db;
+}
+
+.ms-container--timepicker:hover:not(.disabled) {
+    border-color: #9ca3af;
+}
+
+.ms-container--timepicker:focus-within:not(.disabled) {
+    border-color: #10b981;
+}
+
+.ms-container--timepicker.disabled {
+    background-color: #f3f4f6;
+    cursor: not-allowed;
+    border-color: #d1d5db;
+}
+
+.ms-input--timepicker {
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    line-height: 20px;
+    color: #111827;
+    width: 100%;
+    cursor: pointer;
+}
+
+.ms-input--timepicker:disabled {
+    cursor: not-allowed;
+    color: #9ca3af;
+}
+
+.ms-input--timepicker::placeholder {
+    color: #9ca3af;
+}
+
+.ms-input--timepicker:focus {
+    outline: none;
+}
+
+/* Time Picker Dropdown */
+.ms-timepicker-dropdown {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 9999;
+}
+
+.time-options-container {
+    padding: 4px 0;
+}
+
+.time-option {
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 20px;
+    color: #111827;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.time-option:hover {
+    background-color: #f3f4f6;
+}
+
+.time-option.selected {
+    background-color: #10b981;
+    color: #fff;
+    font-weight: 500;
+}
+
+.time-option.selected:hover {
+    background-color: #059669;
+}
+
+/* Scrollbar Styles */
+.ms-timepicker-dropdown::-webkit-scrollbar {
+    width: 8px;
+}
+
+.ms-timepicker-dropdown::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 4px;
+}
+
+.ms-timepicker-dropdown::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 4px;
+}
+
+.ms-timepicker-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* Number Input Styles*/
+.ms-number {
+    padding: 0;
+}
+
+.ms-number {
+    position: relative;
+}
+
+.ms-number-container {
+    position: relative;
+}
+
+.ms-number-item {
+    background: #fff;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    line-height: 20px;
+    color: #111827;
+    padding: 0;
+    text-align: left;
+}
+
+.ms-number-item:disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.ms-number-item::-webkit-outer-spin-button,
+.ms-number-item::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.ms-number-item[type=number] {
+    -moz-appearance: textfield;
+}
+
+/* Textarea Styles */
+
+.ms-textarea {
+    position: relative;
+}
+
+.ms-textarea .ms-textarea-item {
+    background: #fff;
+    height: 68px;
+    overflow: auto;
+    border-radius: 4px;
+    border: 1px solid #d5dfe2;
+    padding: 6px 10px;
+    resize: none;
+}
+
+.ms-textarea-item:disabled {
+    background-color: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+    resize: none;
+}
+
+.ms-textarea-item::placeholder {
+    color: #9ca3af;
+}
+
+.ms-textarea-item:focus {
+    outline: none;
+}
+
+.ms-textarea-item::-webkit-scrollbar {
+    width: 8px;
+}
+
+.ms-textarea-item::-webkit-scrollbar-track {
+    background: #f3f4f6;
+    border-radius: 4px;
+}
+
+.ms-textarea-item::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 4px;
+}
+
+.ms-textarea-item::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* Validation Styles */
+
+.ms-validate.error .input-container {
+    border-color: #e54848 !important;
+}
+
+.ms-validate.error .ms-container--timepicker {
+    border-color: #e54848 !important;
+}
+
+.ms-textarea-required {
+    color: #e54848;
+}
+
+.ms-datepicker-required {
+    color: #e54848;
+}
+
+/*Ratio*/
+
+.ms-radio {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+input:checked~.checkmark {
+    border-color: #009b71;
+}
+.ms-radio .checkmark{
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    color: #fff;
+    text-align: center;
+    border-radius: 50%;
+    position: relative;
+    border: 1px solid #7b7b7b;
+    background-color: #fff;
+    cursor: pointer;
+}
+input:checked~.checkmark:before {
+    content: "";
+    display: inline-block;
+    height: 8px;
+    width: 8px;
+    border-radius: 50%;
+    background-color: #009b71;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+.ms-radio input {
+    position: absolute;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+}
+
+.ms-radio-content {
+    justify-content: center;
+    align-items: flex-start;
+    gap: 4px;
+    padding-left: 8px;
+}
+.ms-radio-content .ms-radio--text {
+    display: inline-block;
+    font-weight: 500;
+}
+/* Utilities */
+
+.pointer {
+    cursor: pointer;
+}
+
+.v-popper--has-tooltip {
+    position: relative;
+}
