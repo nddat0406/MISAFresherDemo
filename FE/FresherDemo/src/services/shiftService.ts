@@ -78,6 +78,7 @@ export interface DeleteShiftsResponse {
     shiftCode: string;
     reason: string;
   }>;
+  triggerRefresh?: boolean;
 }
 
 /**
@@ -111,8 +112,8 @@ const SHIFT_COLUMNS = [
   'EndShiftTime',
   'BeginBreakTime',
   'EndBreakTime',
-  'WorkingTime',
-  'BreakingTime',
+  'WorkingTimeHours',
+  'BreakingTimeHours',
   'Status',
   'CreatedBy',
   'CreatedDate',
@@ -193,6 +194,29 @@ function mapShiftToShiftDTO(shift: Shift): ShiftDTO {
  */
 export const convertFormDataToShift = (formData: ShiftFormData, existingShift?: Shift): Partial<Shift> => {
     const baseDate = '2000-01-01T';
+    //Tính toán workingTime và breakingTime nếu không có giá trị
+    if (!formData.workingTime) {
+        const beginShift = new Date(`${baseDate}${formData.beginShiftTime}`);
+        const endShift = new Date(`${baseDate}${formData.endShiftTime}`);
+        let totalShiftMinutes = (endShift.getTime() - beginShift.getTime()) / (1000 * 60);
+        if (totalShiftMinutes < 0) {
+            totalShiftMinutes += 24 * 60; // Điều chỉnh cho ca qua đêm
+        }
+        let breakMinutes = 0;
+        if (formData.beginBreakTime && formData.endBreakTime) {
+            const beginBreak = new Date(`${baseDate}${formData.beginBreakTime}`);
+            const endBreak = new Date(`${baseDate}${formData.endBreakTime}`);
+            breakMinutes = (endBreak.getTime() - beginBreak.getTime()) / (1000 * 60);
+            if (breakMinutes < 0) {
+                breakMinutes += 24 * 60; // Điều chỉnh cho ca qua đêm
+            }
+        }
+        formData.workingTime = parseFloat(((totalShiftMinutes - breakMinutes) / 60).toFixed(2));
+        formData.breakingTime = parseFloat((breakMinutes / 60).toFixed(2));
+    }
+    const workingTime = formData.workingTime ?? 0;
+    const breakingTime = formData.breakingTime ?? 0;
+
     return {
         shiftId: formData.shiftId || existingShift?.shiftId,
         shiftCode: formData.shiftCode,
@@ -201,8 +225,8 @@ export const convertFormDataToShift = (formData: ShiftFormData, existingShift?: 
         endShiftTime: new Date(`${baseDate}${formData.endShiftTime}`),
         beginBreakTime: formData.beginBreakTime ? new Date(`${baseDate}${formData.beginBreakTime}`) : undefined,
         endBreakTime: formData.endBreakTime ? new Date(`${baseDate}${formData.endBreakTime}`) : undefined,
-        workingTime: Math.round(formData.workingTime ?? 0),
-        breakingTime: Math.round(formData.breakingTime ?? 0),
+        workingTime: Math.round(workingTime),
+        breakingTime: Math.round(breakingTime),
         inactive: formData?.inactive ?? false,
         createdBy: existingShift?.createdBy,
         createdDate: existingShift?.createdDate,
@@ -227,7 +251,8 @@ class ShiftService extends BaseService<ShiftApi> {
    */
   async query(
     params: QueryParams = {},
-    saveToStore: boolean = true
+    saveToStore: boolean = true,
+    columnDefinitions?: any[]
   ): Promise<{
     data: Shift[];
     total: number;
@@ -235,7 +260,7 @@ class ShiftService extends BaseService<ShiftApi> {
     pageSize: number;
   }> {
     // Build query DTO using BaseService helper
-    const queryDTO = buildQueryDTO(params, SHIFT_COLUMNS, SHIFT_STRING_COLUMNS);
+    const queryDTO = buildQueryDTO(params, SHIFT_COLUMNS, SHIFT_STRING_COLUMNS, columnDefinitions);
 
     // Call API layer
     const response = await this.api.query(queryDTO);
@@ -399,6 +424,11 @@ class ShiftService extends BaseService<ShiftApi> {
           totalPage: Math.ceil(Math.max(0, currentPagination.totalCount - (result.deletedCount ?? shifts.length)) / currentPagination.pageSize)
         });
       }
+      if(this.storeActions.getStoreItemCount() === 0){
+        result.triggerRefresh = true
+        return result;
+      }
+
     }
 
     return result;

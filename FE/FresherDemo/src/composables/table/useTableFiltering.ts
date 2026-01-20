@@ -13,12 +13,15 @@ export type FilterOperator =
     | 'lessOrEqual' 
     | 'different'
     | 'isNull'
-    | 'notNull';
+    | 'notNull'
+    | 'selected';
+
+export type FilterType = 'text' | 'number' | 'date' | 'time' | 'select';
 
 export interface FilterState {
     operator: FilterOperator;
     value: string;
-    type: 'text' | 'number' | 'date' | 'time';
+    type: FilterType;
 }
 
 export const useTableFiltering = () => {
@@ -68,7 +71,7 @@ export const useTableFiltering = () => {
      * Lấy filter state cho một cột, hoặc trả về state mặc định
      * Create by: DatND (18/1/2026)
      */
-    const getFilterState = (field: string, filterType?: 'text' | 'number' | 'date' | 'time'): FilterState => {
+    const getFilterState = (field: string, filterType?: FilterType): FilterState => {
         const existing = filters.value[field];
         if (existing) return existing;
         

@@ -117,7 +117,7 @@ const errorDialogMessage = ref('');
  */
 const breakDuration = computed(() => {
     if (!formData.value.beginBreakTime || !formData.value.endBreakTime) {
-        return 0;
+        return null;
     }
 
     try {
@@ -126,7 +126,7 @@ const breakDuration = computed(() => {
         const end = new Date(`${baseDate}${formData.value.endBreakTime}`);
 
         if (isNaN(begin.getTime()) || isNaN(end.getTime())) {
-            return 0;
+            return null;
         }
 
         let minutes = (end.getTime() - begin.getTime()) / (1000 * 60);
@@ -135,7 +135,8 @@ const breakDuration = computed(() => {
         const hours = minutes / 60;
         return Math.round(hours * 100) / 100; // Round to 2 decimal places
     } catch {
-        return 0;
+        console.log('Error calculating workingDuration');
+        return null;
     }
 });
 
@@ -148,7 +149,7 @@ const breakDuration = computed(() => {
  */
 const workingDuration = computed(() => {
     if (!formData.value.beginShiftTime || !formData.value.endShiftTime) {
-        return 0;
+        return null;
     }
 
     try {
@@ -157,20 +158,21 @@ const workingDuration = computed(() => {
         const end = new Date(`${baseDate}${formData.value.endShiftTime}`);
 
         if (isNaN(begin.getTime()) || isNaN(end.getTime())) {
-            return 0;
+            return null;
         }
 
         let totalMinutes = (end.getTime() - begin.getTime()) / (1000 * 60);
         if (totalMinutes < 0) totalMinutes += 24 * 60; // Handle overnight
 
-        const breakMinutes = breakDuration.value * 60;
+        const breakMinutes = (breakDuration.value ?? 0) * 60;
         const workingMinutes = totalMinutes - breakMinutes;
 
         // Never return negative
         const hours = Math.max(0, workingMinutes / 60);
         return Math.round(hours * 100) / 100; // Round to 2 decimal places
     } catch {
-        return 0;
+        console.log('Error calculating workingDuration');
+        return null;
     }
 });
 
@@ -638,19 +640,21 @@ onMounted(() => {
                     </div>
                 </div>
                 <div class="form-group flex mt-4 gap-4" v-if="mode === 'edit'">
-                    <label for="statusInfo" title="Trạng thái" class="form-label w-37.5">Trạng thái</label>
+                    <label class="form-label w-37.5">Trạng thái</label>
+
                     <div class="form-control-container radio-item">
                         <div class="flex flex-row">
                             <label class="ms-radio mr-4">
-                                <input type="radio" name="rdname" tabindex="0" value="false"
-                                    :checked="!formData.inactive"><span <span class="checkmark"></span>
+                                <input type="radio" name="rdname" v-model="formData.inactive" :value="false" />
+                                <span class="checkmark"></span>
                                 <div class="flex flex-column ms-radio-content">
                                     <span class="ms-radio--text">Đang sử dụng</span>
                                 </div>
                             </label>
+
                             <label class="ms-radio mr-4">
-                                <input type="radio" name="rdname" tabindex="0" value="true"
-                                    :checked="formData.inactive"><span class="checkmark"></span>
+                                <input type="radio" name="rdname" v-model="formData.inactive" :value="true" />
+                                <span class="checkmark"></span>
                                 <div class="flex flex-column ms-radio-content">
                                     <span class="ms-radio--text">Ngừng sử dụng</span>
                                 </div>
@@ -658,6 +662,7 @@ onMounted(() => {
                         </div>
                     </div>
                 </div>
+
             </div>
 
         </template>

@@ -19,7 +19,7 @@ export const useShiftStore = defineStore('shift', () => {
   const currentItem = ref<Shift | null>(null);
   const pagination = ref({
     pageIndex: 1,
-    pageSize: 30,
+    pageSize: 10,
     totalCount: 0,
     totalPage: 0,
   });
@@ -42,6 +42,8 @@ export const useShiftStore = defineStore('shift', () => {
   const inactiveShifts = computed<Shift[]>(() => {
     return items.value.filter((shift) => shift.inactive);
   });
+
+
 
   /**
    * Lấy tổng số shifts
@@ -84,7 +86,13 @@ export const useShiftStore = defineStore('shift', () => {
   function setCurrentItem(item: Shift | null) {
     currentItem.value = item;
   }
-
+  /**
+     * Lấy tổng số shifts trong store
+     * Created by: DatND (18/1/2026)
+     */
+  function getStoreItemCount(): number {
+    return items.value.length;
+  }
   /**
    * Thêm hoặc cập nhật một shift trong danh sách
    * Nếu shift đã tồn tại (theo shiftId) thì update và đưa lên đầu, ngược lại thì thêm mới ở đầu
@@ -185,6 +193,7 @@ export const useShiftStore = defineStore('shift', () => {
 
     // Actions
     setItems,
+    getStoreItemCount,
     setPagination,
     setCurrentItem,
     upsertItem,

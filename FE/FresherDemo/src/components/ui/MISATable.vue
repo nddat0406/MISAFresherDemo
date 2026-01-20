@@ -1,17 +1,76 @@
 <script setup lang="ts" generic="T">
+// ========== IMPORTS ==========
 import { computed, onMounted, onBeforeUnmount, ref, watch, useSlots } from 'vue';
+
+// Components
 import Checkbox from './MISACheckbox.vue';
 import MISACombobox from './MISACombobox.vue';
+import TablePagination from './table/parts/TablePagination.vue';
+import NoDataState from './table/parts/NoDataState.vue';
+
+// Composables
 import { useTableSelection } from '../../composables/table/useTableSelection';
 import { useTableColumnSizing } from '../../composables/table/useTableColumnSizing';
 import { useTableFiltering } from '@/composables/table/useTableFiltering';
+
+// Types
 import type { BatchAction, TableColumn } from '../../types/tableTypes';
-import TablePagination from './table/parts/TablePagination.vue';
 import type { SortStateItem } from '@/composables/table/useTableSorting';
 import type { FilterState } from '@/composables/table/useTableFiltering';
-import NoDataState from './table/parts/NoDataState.vue';
-import { DatePicker } from 'primevue';
 
+// ========== CONSTANTS ==========
+const CHECKBOX_COLUMN_WIDTH = 40;
+const SEARCH_DEBOUNCE_MS = 1000;
+const DEFAULT_COLUMN_WIDTH = 160;
+
+/**
+ * Cấu hình các operator cho filter
+ * Created by: DatND (18/1/2026)
+ */
+const FILTER_OPERATOR_OPTIONS = {
+    common: [
+        { label: '(Trống)', value: 'isNull' },
+        { label: '(Không trống)', value: 'notNull' }
+    ],
+    number: [
+        { label: 'Bằng', value: 'equals' },
+        { label: 'Khác', value: 'different' },
+        { label: 'Lớn hơn', value: 'greater' },
+        { label: 'Nhỏ hơn', value: 'less' },
+        { label: 'Lớn hơn hoặc bằng', value: 'greaterOrEqual' },
+        { label: 'Nhỏ hơn hoặc bằng', value: 'lessOrEqual' }
+    ],
+    text: [
+        { label: 'Chứa', value: 'contains' },
+        { label: 'Không chứa', value: 'notContains' },
+        { label: 'Bằng', value: 'equals' },
+        { label: 'Khác', value: 'different' },
+        { label: 'Bắt đầu bằng', value: 'startsWith' },
+        { label: 'Kết thúc bằng', value: 'endsWith' }
+    ]
+} as const;
+
+/**
+ * Ánh xạ operator sang nhãn hiển thị
+ * Created by: DatND (18/1/2026)
+ */
+const OPERATOR_LABELS: Record<string, string> = {
+    contains: 'Chứa',
+    notContains: 'Không chứa',
+    equals: 'Bằng',
+    notequal: 'Khác',
+    different: 'Khác',
+    startsWith: 'Bắt đầu bằng',
+    endsWith: 'Kết thúc bằng',
+    greater: 'Lớn hơn',
+    less: 'Nhỏ hơn',
+    greaterOrEqual: 'Lớn hơn hoặc bằng',
+    lessOrEqual: 'Nhỏ hơn hoặc bằng',
+    isNull: 'Trống',
+    notNull: 'Không trống',
+};
+
+// ========== PROPS & EMITS ==========
 interface Props {
     data: T[];
     columns: TableColumn[];
@@ -34,7 +93,7 @@ const props = withDefaults(defineProps<Props>(), {
     showAddButton: true,
     addButtonText: 'Thêm',
     rowsPerPageOptions: () => [10, 20, 30, 50, 100],
-    defaultRowsPerPage: 20,
+    defaultRowsPerPage: 10,
     selectionMode: 'multiple',
     rowKey: 'id',
     total: 0
@@ -55,13 +114,12 @@ const emit = defineEmits<{
 }>();
 
 const slots = useSlots();
-const searchQuery = ref('');
-const pageSize = ref(props.defaultRowsPerPage ?? 20);
-const currentPage = ref(1);
-const sortState = ref<SortStateItem[]>([]);
-const pinnedColumns = ref<string[]>([]);
 
-// Use filtering composable
+// ========== COMPOSABLES ==========
+/**
+ * Khởi tạo filtering composable
+ * Created by: DatND (18/1/2026)
+ */
 const {
     filters,
     applyFilter,
@@ -74,8 +132,20 @@ const {
 } = useTableFiltering();
 
 /**
- * Lấy khóa duy nhất của dòng để thao tác chọn. Trả về giá trị của rowKey hoặc JSON.stringify nếu không có
- * Create by: DatND (15/1/2026)
+ * Khởi tạo column sizing composable
+ * Created by: DatND (15/1/2026)
+ */
+const { columnWidths, initWidths, getColumnWidth, startResize, stopResize } = useTableColumnSizing({
+    getInitialWidth: (field) => {
+        const column = props.columns.find(col => col.field === field);
+        const width = column?.width ? parseInt(column.width, 10) : DEFAULT_COLUMN_WIDTH;
+        return Number.isNaN(width) ? DEFAULT_COLUMN_WIDTH : width;
+    }
+});
+
+/**
+ * Lấy khóa duy nhất của dòng
+ * Created by: DatND (15/1/2026)
  */
 const getRowKey = (item: any): string | number => {
     const key = item?.[props.rowKey];
@@ -83,14 +153,208 @@ const getRowKey = (item: any): string | number => {
 };
 
 /**
- * Emit sự kiện khi có thay đổi về selection, truyền danh sách items được chọn lên parent
- * Create by: DatND (15/1/2026)
+ * Khởi tạo selection composable
+ * Created by: DatND (15/1/2026)
  */
-const emitSelectionChange = (items: T[]) => emit('selection-change', items);
+const {
+    selectedKeys,
+    activeRowKey,
+    selectedItems,
+    isRowChecked,
+    isActiveRow,
+    handleSelectAllChange,
+    toggleRowSelection,
+    unselectAll,
+    setActiveRow
+} = useTableSelection({
+    data: () => props.data,
+    selectionMode: () => props.selectionMode,
+    getRowKey,
+    emitSelectionChange: (items: T[]) => emit('selection-change', items)
+});
+
+// ========== REACTIVE STATE ==========
+/**
+ * Trạng thái tìm kiếm và phân trang
+ * Created by: DatND (15/1/2026)
+ */
+const searchQuery = ref('');
+const pageSize = ref(props.defaultRowsPerPage ?? 10);
+const currentPage = ref(1);
 
 /**
- * Emit sự kiện thay đổi dữ liệu để parent fetch API với params search, filters, sorts, page, pageSize
- * Create by: DatND (15/1/2026)
+ * Trạng thái sắp xếp và ghim cột
+ * Created by: DatND (15/1/2026)
+ */
+const sortState = ref<SortStateItem[]>([]);
+const pinnedColumns = ref<string[]>([]);
+
+/**
+ * Timeout cho search debounce
+ * Created by: DatND (18/1/2026)
+ */
+let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// ========== COMPUTED PROPERTIES ==========
+/**
+ * Sắp xếp cột với cột được ghim đầu tiên
+ * Created by: DatND (15/1/2026)
+ */
+const orderedColumns = computed(() => {
+    const pinned = props.columns.filter(col => pinnedColumns.value.includes(col.field));
+    const rest = props.columns.filter(col => !pinnedColumns.value.includes(col.field));
+    return [...pinned, ...rest];
+});
+
+/**
+ * Tính offset left cho các cột được ghim
+ * Created by: DatND (15/1/2026)
+ */
+const stickyOffsets = computed(() => {
+    const offsets: Record<string, number> = {};
+    let left = CHECKBOX_COLUMN_WIDTH;
+
+    orderedColumns.value.forEach(col => {
+        if (pinnedColumns.value.includes(col.field)) {
+            offsets[col.field] = left;
+            left += getColumnWidth(col.field);
+        }
+    });
+
+    return offsets;
+});
+
+/**
+ * Trạng thái checkbox chọn tất cả
+ * Created by: DatND (15/1/2026)
+ */
+const selectAllModel = computed({
+    get: () => props.data.length > 0 && props.data.every(item => selectedKeys.value.has(getRowKey(item))),
+    set: (value: boolean) => handleSelectAllChange(props.data, value)
+});
+
+/**
+ * Tính toán style cho từng cột
+ * Created by: DatND (15/1/2026)
+ */
+const columnStyles = computed(() => {
+    const map: Record<string, Record<string, string | number | undefined>> = {};
+
+    orderedColumns.value.forEach(column => {
+        const width = getColumnWidth(column.field);
+        const isPinned = pinnedColumns.value.includes(column.field);
+        const left = stickyOffsets.value[column.field];
+
+        map[column.field] = {
+            width: `${width}px`,
+            minWidth: `${width}px`,
+            maxWidth: `${width}px`,
+            textAlign: column.align || 'left',
+            position: isPinned ? 'sticky' : undefined,
+            left: isPinned ? `${left}px` : undefined,
+            zIndex: isPinned ? 3 : undefined,
+        };
+    });
+
+    return map;
+});
+
+
+/**
+ * Tính toán label cho filter tags
+ * Created by: DatND (18/1/2026)
+ */
+const filterLabels = computed(() =>
+    Object.entries(filters.value).map(([field, filter]) => ({
+        filter,
+        field,
+        label: getFilterLabel(field, filter)
+    }))
+);
+
+/**
+ * Thông tin phân trang hiển thị
+ * Created by: DatND (15/1/2026)
+ */
+const pageInfo = computed(() => {
+    const total = totalCount.value;
+    if (!total) return '0 - 0';
+
+    const start = (currentPage.value - 1) * pageSize.value + 1;
+    const end = Math.min(currentPage.value * pageSize.value, total);
+    return `${start} - ${end}`;
+});
+
+/**
+ * Tổng số bản ghi
+ * Created by: DatND (15/1/2026)
+ */
+const totalCount = computed(() => props.total || props.data.length);
+
+// ========== HELPERS ==========
+/**
+ * Kiểm tra cột có được ghim không
+ * Created by: DatND (15/1/2026)
+ */
+const isPinned = (column: TableColumn) => pinnedColumns.value.includes(column.field);
+
+/**
+ * Lấy trạng thái filter cho cột
+ * Created by: DatND (18/1/2026)
+ */
+const getFilterState = (column: TableColumn): FilterState => {
+    return getFilterStateFromComposable(column.field, column.filterType);
+};
+
+/**
+ * Lấy hướng sắp xếp của cột
+ * Created by: DatND (15/1/2026)
+ */
+const getSortDirection = (field: string) => {
+    return sortState.value.find(item => item.field === field)?.direction ?? null;
+};
+
+/**
+ * Lấy danh sách operator cho filter theo loại cột
+ * Created by: DatND (18/1/2026)
+ */
+const getFilterOperatorOptions = (column: TableColumn) => {
+    const isNumericOrDate = column.filterType === 'number' || column.filterType === 'date';
+    const specificOptions = isNumericOrDate
+        ? FILTER_OPERATOR_OPTIONS.number
+        : FILTER_OPERATOR_OPTIONS.text;
+
+    return [...FILTER_OPERATOR_OPTIONS.common, ...specificOptions];
+};
+
+/**
+ * Tạo nhãn hiển thị cho filter tag
+ * Created by: DatND (18/1/2026)
+ */
+const getFilterLabel = (field: string, filter: FilterState) => {
+    const column = props.columns.find(col => col.field === field);
+    if (!column) return null;
+
+    let valueLabel = '';
+    if (filter.operator === 'isNull' || filter.operator === 'notNull') {
+        valueLabel = '';
+    } else if (column.filterType === 'select' && column.filterOptions) {
+        const option = column.filterOptions.find(opt => opt.value === filter.value);
+        valueLabel = option ? option.label : filter.value;
+    } else {
+        valueLabel = filter.value;
+    }
+
+    return {
+        header: column.header,
+        operatorLabel: OPERATOR_LABELS[filter.operator] || '',
+        valueLabel
+    };
+};
+
+/**
+ * Emit sự kiện thay đổi dữ liệu với tham số hiện tại
+ * Created by: DatND (15/1/2026)
  */
 const emitDataChange = () => {
     emit('data-change', {
@@ -102,96 +366,10 @@ const emitDataChange = () => {
     });
 };
 
-const { columnWidths, initWidths, getColumnWidth, startResize, stopResize } = useTableColumnSizing({
-    getInitialWidth: (field) => {
-        const column = props.columns.find(col => col.field === field);
-        const width = column?.width ? parseInt(column.width, 10) : 160;
-        return Number.isNaN(width) ? 160 : width;
-    }
-});
-
-const { selectedKeys, activeRowKey, selectedItems, isRowChecked, isActiveRow, handleSelectAllChange, toggleRowSelection, unselectAll, setActiveRow } = useTableSelection({
-    data: () => props.data,
-    selectionMode: () => props.selectionMode,
-    getRowKey,
-    emitSelectionChange
-});
-
-
+// ========== HANDLERS ==========
 /**
- * Tính toán cột theo thứ tự, đưa các pinned columns lên đầu. Trả về mảng columns đã sắp xếp
- * Create by: DatND (15/1/2026)
- */
-const orderedColumns = computed(() => {
-    const pinned = props.columns.filter(col => pinnedColumns.value.includes(col.field));
-    const rest = props.columns.filter(col => !pinnedColumns.value.includes(col.field));
-    return [...pinned, ...rest];
-});
-
-/**
- * Tính offset left cho các sticky columns, bắt đầu từ 40px (checkbox width). Trả về Record<field, offset>
- * Create by: DatND (15/1/2026)
- */
-const stickyOffsets = computed(() => {
-    const offsets: Record<string, number> = {};
-    let left = 40; // checkbox column width
-    orderedColumns.value.forEach(col => {
-        if (pinnedColumns.value.includes(col.field)) {
-            offsets[col.field] = left;
-            left += getColumnWidth(col.field);
-        }
-    });
-    return offsets;
-});
-
-const selectAllModel = computed({
-    get: () => props.data.length > 0 && props.data.every(item => selectedKeys.value.has(getRowKey(item))),
-    set: (value: boolean) => handleSelectAllChange(props.data, value)
-});
-
-/**
- * Tính toán style cho mỗi cột bao gồm width, alignment, sticky position, z-index. Trả về Record<field, styleObject>
- * Create by: DatND (15/1/2026)
- */
-const columnStyles = computed(() => {
-    const map: Record<string, Record<string, string | number | undefined>> = {};
-    orderedColumns.value.forEach(column => {
-        const width = getColumnWidth(column.field);
-        const isPinned = pinnedColumns.value.includes(column.field);
-        const left = stickyOffsets.value[column.field];
-        map[column.field] = {
-            width: `${width}px`,
-            minWidth: `${width}px`,
-            maxWidth: `${width}px`,
-            textAlign: column.align || 'left',
-            position: isPinned ? 'sticky' : undefined,
-            left: isPinned ? `${left}px` : undefined,
-            zIndex: isPinned ? 3 : undefined,
-        };
-    });
-    return map;
-});
-/**
- * Check trạng thái cột có được ghim hay không. Trả về true nếu column.field có trong pinnedColumns
- * Create by: DatND (15/1/2026)
- */
-const isPinned = (column: TableColumn) => pinnedColumns.value.includes(column.field);
-
-
-const pageInfo = computed(() => {
-    const total = props.total || props.data.length;
-    if (!total) return '0 - 0';
-    const start = (currentPage.value - 1) * pageSize.value + 1;
-    const end = Math.min(currentPage.value * pageSize.value, total);
-    return `${start} - ${end}`;
-});
-
-const totalCount = computed(() => props.total || props.data.length);
-
-
-/**
- * Xử lý batch action cho các dòng được chọn. Gọi action.action với selectedItems nếu có dòng được chọn
- * Create by: DatND (15/1/2026)
+ * Xử lý thực thi batch action
+ * Created by: DatND (15/1/2026)
  */
 const handleBatchAction = (action: BatchAction) => {
     if (selectedItems.value.length) {
@@ -200,8 +378,8 @@ const handleBatchAction = (action: BatchAction) => {
 };
 
 /**
- * Xử lý click vào dòng, set active row và toggle selection nếu mode là single. Emit edit event
- * Create by: DatND (15/1/2026)
+ * Xử lý click vào dòng
+ * Created by: DatND (15/1/2026)
  */
 const handleRowClick = (item: T, rowIndex: number) => {
     setActiveRow(item);
@@ -211,8 +389,8 @@ const handleRowClick = (item: T, rowIndex: number) => {
 };
 
 /**
- * Xử lý chỉnh sửa item, emit edit event với item và rowIndex
- * Create by: DatND (15/1/2026)
+ * Xử lý chỉnh sửa dòng
+ * Created by: DatND (15/1/2026)
  */
 const handleEdit = (item: T, rowIndex: number) => {
     emit('edit', item, rowIndex);
@@ -281,85 +459,8 @@ const togglePin = (field: string) => {
 };
 
 /**
- * Lấy trạng thái filter cho một cột với type từ column definition
- * Create by: DatND (18/1/2026)
- */
-const getFilterState = (column: TableColumn): FilterState => {
-    return getFilterStateFromComposable(column.field, column.filterType);
-};
-
-/**
- * Lấy hướng sắp xếp của một cột. Trả về 'asc', 'desc' hoặc null
- * Create by: DatND (15/1/2026)
- */
-const getSortDirection = (field: string) => sortState.value.find(item => item.field === field)?.direction ?? null;
-
-/**
- * Lấy options cho filter operator theo filterType
- * Create by: DatND (18/1/2026)
- */
-const getFilterOperatorOptions = (column: TableColumn) => {
-    if (column.filterType === 'number' || column.filterType === 'date') {
-        return [
-            { label: '(Trống)', value: 'isNull' },
-            { label: '(Không trống)', value: 'notNull' },
-            { label: 'Bằng', value: 'equals' },
-            { label: 'Khác', value: 'different' },
-            { label: 'Lớn hơn', value: 'greater' },
-            { label: 'Nhỏ hơn', value: 'less' },
-            { label: 'Lớn hơn hoặc bằng', value: 'greaterOrEqual' },
-            { label: 'Nhỏ hơn hoặc bằng', value: 'lessOrEqual' }
-        ];
-    }
-    return [
-        { label: '(Trống)', value: 'isNull' },
-        { label: '(Không trống)', value: 'notNull' },
-        { label: 'Chứa', value: 'contains' },
-        { label: 'Không chứa', value: 'notContains' },
-        { label: 'Bằng', value: 'equals' },
-        { label: 'Khác', value: 'different' },
-        { label: 'Bắt đầu bằng', value: 'startsWith' },
-        { label: 'Kết thúc bằng', value: 'endsWith' }
-    ];
-};
-
-/**
- * Lấy label hiển thị cho filter tag dựa trên operator và value
- * Create by: DatND (18/1/2026)
- */
-const getFilterLabel = (field: string, filter: FilterState): string => {
-    const column = props.columns.find(col => col.field === field);
-    const columnName = column?.header || field;
-
-    const operatorLabels: Record<string, string> = {
-        contains: 'Chứa',
-        notContains: 'Không chứa',
-        equals: 'Bằng',
-        notequal: 'Khác',
-        different: 'Khác',
-        startsWith: 'Bắt đầu bằng',
-        endsWith: 'Kết thúc bằng',
-        greater: 'Lớn hơn',
-        less: 'Nhỏ hơn',
-        greaterOrEqual: 'Lớn hơn hoặc bằng',
-        lessOrEqual: 'Nhỏ hơn hoặc bằng',
-        isNull: 'Trống',
-        notNull: 'Không trống'
-    };
-
-    const operatorLabel = operatorLabels[filter.operator] || filter.operator;
-
-    // Null operators don't show value
-    if (filter.operator === 'isNull' || filter.operator === 'notNull') {
-        return `${columnName} (${operatorLabel})`;
-    }
-
-    return `${columnName} (${operatorLabel}: ${filter.value})`;
-};
-
-/**
- * Xử lý thay đổi trang theo action (first/prev/next/last), cập nhật currentPage và emit data-change
- * Create by: DatND (15/1/2026)
+ * Xử lý thay đổi trang
+ * Created by: DatND (15/1/2026)
  */
 const handlePageChange = (action: 'first' | 'prev' | 'next' | 'last') => {
     const totalPages = Math.ceil(totalCount.value / pageSize.value);
@@ -381,17 +482,17 @@ const handlePageChange = (action: 'first' | 'prev' | 'next' | 'last') => {
     emitDataChange();
 };
 
+// ========== WATCHERS & LIFECYCLE ==========
 /**
- * Watch search query với debounce (1 giây), reset về page 1 và emit data-change
- * Create by: DatND (18/1/2026)
+ * Debounce tìm kiếm
+ * Created by: DatND (18/1/2026)
  */
-let searchDebounceTimeout: ReturnType<typeof setTimeout> | null = null;
 watch(searchQuery, () => {
     if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
     searchDebounceTimeout = setTimeout(() => {
         currentPage.value = 1;
         emitDataChange();
-    }, 1000);
+    }, SEARCH_DEBOUNCE_MS);
 });
 
 /**
@@ -407,27 +508,31 @@ watch(pageSize, () => {
  * Watch activeRowKey prop để set active row tương ứng khi có thay đổi từ bên ngoài
  */
 watch(
-  () => props.activeRowKey,
-  (key) => {
-    if (!key) return;
+    () => props.activeRowKey,
+    (key) => {
+        if (!key) return;
 
-    const item = props.data.find(
-      d => getRowKey(d) === key
-    );
-
-    if (item) {
-      setActiveRow(item);
-    }
-  },
-  { immediate: true }
+        const item = props.data.find(d => getRowKey(d) === key);
+        if (item) {
+            setActiveRow(item);
+        }
+    },
+    { immediate: true }
 );
 
+/**
+ * Khởi tạo bảng khi mount
+ * Created by: DatND (15/1/2026)
+ */
 onMounted(() => {
     initWidths(props.columns.map(col => col.field));
-    // Emit initial data change để fetch dữ liệu ban đầu
     emitDataChange();
 });
 
+/**
+ * Dọn dẹp khi unmount
+ * Created by: DatND (15/1/2026)
+ */
 onBeforeUnmount(() => {
     stopResize();
 });
@@ -456,8 +561,18 @@ onBeforeUnmount(() => {
                                 </div>
                                 <div class="filter-conditions h-full"
                                     v-if="hasActiveFilters && selectedItems.length === 0">
-                                    <div class="filter-item" v-for="(filter, field) in filters" :key="field">
-                                        <div class="lable-value-filter">{{ getFilterLabel(field as string, filter) }}
+                                    <div class="filter-item" v-for="({filter, field, label}) in filterLabels" :key="field">
+                                        <div class="lable-value-filter">
+                                            <template v-if="label">
+                                                <span>{{ label!.header }}</span>
+
+                                                <span v-if="label!.operatorLabel && filter.operator !=='selected'"
+                                                    style="color: #009B71">
+                                                    {{ label!.operatorLabel }}
+                                                </span>
+
+                                                <span :style="filter.operator==='selected' ? { color: '#009B71' } : {}">{{ label!.valueLabel }}</span>
+                                            </template>
                                         </div>
                                         <div class="mi icon16 pointer close"
                                             @click="handleClearFilter(field as string)"></div>
@@ -465,7 +580,8 @@ onBeforeUnmount(() => {
                                     <div class="delete-all-filter" @click="handleClearAllFilters">Bỏ lọc</div>
                                 </div>
                                 <slot name="toolbar-append" :unselectAll="unselectAll" :selectedItems="selectedItems"
-                                    :batchActions="batchActions"></slot>
+                                    :batchActions="batchActions">
+                                </slot>
                             </div>
 
                             <div class="action flex items-center flex-row" v-if="selectedItems.length === 0">
@@ -604,7 +720,8 @@ onBeforeUnmount(() => {
                                                                         </div>
                                                                     </div>
                                                                     <div class="filter-container">
-                                                                        <div class="control-gap-item view-fitler-text">
+                                                                        <div class="control-gap-item view-fitler-text"
+                                                                            v-if="column.filterType !== 'select'">
                                                                             <div class="column-filter flex">
                                                                                 <div class="filter-operator">
                                                                                     <MISACombobox :placement="'bottom'"
@@ -613,7 +730,8 @@ onBeforeUnmount(() => {
                                                                                         @update:model-value="(op) => updateFilterState(column.field, { operator: op as any })" />
                                                                                 </div>
                                                                             </div>
-                                                                            <div class="filter-value" v-if="column.filterType==='number' || column.filterType==='text'">
+                                                                            <div class="filter-value"
+                                                                                v-if="column.filterType === 'number' || column.filterType === 'text'">
                                                                                 <div class="ms-input ms-editor flex items-center gap-4 w-full"
                                                                                     style="height: auto;">
                                                                                     <div
@@ -628,12 +746,13 @@ onBeforeUnmount(() => {
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
-                                                                            <div class="filter-value" v-if="column.filterType==='date'">
+                                                                            <div class="filter-value"
+                                                                                v-if="column.filterType === 'date'">
                                                                                 <div class="ms-input ms-editor flex items-center gap-4 w-full"
                                                                                     style="height: auto;">
                                                                                     <div
                                                                                         class="flex-1 flex items-center input-container border pointer">
-                                                                                         <input
+                                                                                        <input
                                                                                             class="ms-input-item flex w-full"
                                                                                             placeholder="Nhập giá trị lọc"
                                                                                             :type="column.filterType"
@@ -642,7 +761,7 @@ onBeforeUnmount(() => {
                                                                                             @input="(e: Event) => updateFilterState(column.field, { value: (e.target as HTMLInputElement).value })">
 
 
-                                                                                            <!-- <DatePicker
+                                                                                        <!-- <DatePicker
                                                                                                 :format="'DD/MM/YYYY'"
                                                                                                 :placeholder="'__/__/____'"
                                                                                                 :clearable="true"
@@ -650,6 +769,15 @@ onBeforeUnmount(() => {
                                                                                             </DatePicker> -->
                                                                                     </div>
                                                                                 </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-gap-item view-fitler-text"
+                                                                            v-else-if="column.filterType === 'select'">
+                                                                            <div class="filter-value">
+                                                                                <MISACombobox :placement="'bottom'"
+                                                                                    :options="column.filterOptions || []"
+                                                                                    :model-value="getFilterState(column).value"
+                                                                                    @update:model-value="(val) => updateFilterState(column.field, { operator: 'selected', value: val as string })" />
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -695,13 +823,12 @@ onBeforeUnmount(() => {
                                         <!-- Loading Skeleton -->
                                         <template v-if="loading">
                                             <tr v-for="n in pageSize" :key="`shimmer-${n}`" class="ms-tr">
-                                                <td 
+                                                <td
                                                     style="width: 40px; min-width: 40px; border-right: 1px dotted rgb(193, 196, 204);">
                                                     <div class="shimmer"></div>
                                                 </td>
                                                 <td v-for="column in orderedColumns" :key="`shimmer-${column.field}`"
-                                                    style="border-right: 1px dotted rgb(193, 196, 204);"
-                                                    :style="{ 
+                                                    style="border-right: 1px dotted rgb(193, 196, 204);" :style="{
                                                         width: getColumnWidth(column.field) + 'px',
                                                         minWidth: getColumnWidth(column.field) + 'px',
                                                         maxWidth: getColumnWidth(column.field) + 'px'
@@ -729,23 +856,25 @@ onBeforeUnmount(() => {
                                                     :style="columnStyles[column.field]">
                                                     <div>
                                                         <slot :name="`cell-${column.field}`"
-                                                                :value="(item as any)[column.field]" 
-                                                                :item="item" :column="column" 
-                                                                :row-index="rowIndex">
-                                                        <div class="text-overflow"
-                                                            :title="column.formatter ? column.formatter((item as any)[column.field], item) : (item as any)[column.field]">
-                                                            <span :class="`text-${column.align || 'left'}`"
-                                                                :style="{ textAlign: column.align || 'left' }">
-                                                                <span class="text-view">
-                                                                    <div>
-                                                                        
-                                                                            {{ column.formatter ? column.formatter((item as any)[column.field], item) : (item as any)[column.field] }}
-                                                                    </div>
+                                                            :value="(item as any)[column.field]" :item="item"
+                                                            :column="column" :row-index="rowIndex">
+                                                            <div class="text-overflow"
+                                                                :title="column.formatter ? column.formatter((item as any)[column.field], item) : (item as any)[column.field]">
+                                                                <span :class="`text-${column.align || 'left'}`"
+                                                                    :style="{ textAlign: column.align || 'left' }">
+                                                                    <span class="text-view">
+                                                                        <div>
+                                                                            {{
+                                                                                column.formatter ?
+                                                                                    column.formatter((item as
+                                                                                        any)[column.field], item)
+                                                                                    : (item as any)[column.field]
+                                                                            }}
+                                                                        </div>
+                                                                    </span>
                                                                 </span>
-                                                            </span>
-                                                        </div>
-                                                                        </slot>
-
+                                                            </div>
+                                                        </slot>
                                                     </div>
                                                 </td>
                                                 <td class="ms-td widget-item sticky" v-if="$slots['action-column']"

@@ -1,74 +1,36 @@
+/**
+ * Quản lý danh sách ca làm việc
+ * Hỗ trợ thêm, sửa, xóa, nhân bản và thay đổi trạng thái ca làm việc
+ * Created by: DatND (16/1/2026)
+ */
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+// ========== IMPORTS ==========
+import { ref, computed } from 'vue';
+import { Dropdown } from 'floating-vue';
+
+// Types
 import type { Shift } from '@/types/shift';
 import type { BatchAction, TableColumn } from '@/types/tableTypes';
 import type { FilterState } from '@/composables/table/useTableFiltering';
 import type { SortStateItem } from '@/composables/table/useTableSorting';
+import type { ShiftFormData } from './ShiftModal.vue';
+
+// Components
 import MISATable from '@/components/ui/MISATable.vue';
-import ShiftModal, { type ShiftFormData } from './ShiftModal.vue';
+import ShiftModal from './ShiftModal.vue';
 import MISAConfirmDialog from '@/components/ui/MISAConfirmDialog.vue';
-import { Dropdown } from 'floating-vue';
+
+// Composables & Services
 import { useShiftService } from '@/composables/useShiftService';
-import { formatTimeLocal } from '@/utils/dateFormat';
-import { convertFormDataToShift } from '@/services/shiftService';
 import { useToast } from '@/composables/useToast';
+import { convertFormDataToShift } from '@/services/shiftService';
 
+// Utils
+import { formatTimeLocal } from '@/utils/dateFormat';
 
-
+// ========== CONSTANTS ==========
 /**
- * Sử dụng shift service với Pinia store integration
- * Cung cấp service instance và reactive state từ store
- * 
- * Created by: DatND (18/1/2026)
- */
-const {
-    shiftService,
-    shifts,
-    totalCount,
-    isLoading,
-} = useShiftService();
-
-/**
- * Toast notification instance
- * Created by: DatND (19/1/2026)
- */
-const toast = useToast();
-
-/**
- * Trạng thái hiển thị modal và mode của modal
- * - dialogVisible: Điều khiển việc hiển thị modal
- * - modalMode: Chế độ hoạt động ('add' | 'edit' | 'duplicate')
- * - selectedShift: Ca làm việc được chọn để edit/duplicate
- * 
- * Created by: DatND (16/1/2026)
- */
-const dialogVisible = ref(false);
-const modalMode = ref<'add' | 'edit' | 'duplicate'>('add');
-const selectedShift = ref<Shift | undefined>(undefined);
-const selectedShifts = ref<Shift[]>([]);
-const activeRowKey = ref<string | number | null>(null);
-
-/**
- * State for delete confirmation dialog
- * 
- * Created by: DatND (19/1/2026)
- */
-const showDeleteConfirm = ref(false);
-const shiftsToDelete = ref<Shift[]>([]);
-const deleteShiftMessage = 'Ca làm việc';
-
-// Track last query params for refresh
-const lastQueryParams = ref<{
-    search?: string;
-    filters?: Record<string, FilterState>;
-    sorts?: SortStateItem[];
-    page?: number;
-    pageSize?: number;
-}>({});
-
-
-/**
- * Định nghĩa cột cho bảng hiển thị ca làm việc
+ * Cấu hình cột hiển thị cho bảng ca làm việc
  * Created by: DatND (16/1/2026)
  */
 const columns: TableColumn[] = [
@@ -128,7 +90,13 @@ const columns: TableColumn[] = [
         sortable: true,
         align: 'left',
         width: '150px',
-        filterType: 'text',
+        filterType: 'select',
+        backendField: 'Status', // Map to Status field in backend
+        filterOptions: [
+            { label: 'Đang sử dụng', value: '1' }, // ShiftStatus.Active = 1
+            { label: 'Ngừng sử dụng', value: '2' }  // ShiftStatus.Inactive = 2
+        ],
+        valueTransformer: (value: string) => parseInt(value, 10), // Convert string to number for backend
         formatter: (value: boolean) => value ? 'Ngừng sử dụng' : 'Đang sử dụng'
     },
     {
@@ -166,129 +134,213 @@ const columns: TableColumn[] = [
     },
 ];
 
+// ========== SERVICES & STORES ==========
+/**
+ * Kết nối với shift service và Pinia store
+ * Created by: DatND (18/1/2026)
+ */
+const { shiftService, shifts, totalCount, isLoading } = useShiftService();
 
 /**
- * Định nghĩa các hành động hàng loạt (batch actions) cho bảng ca làm việc
- * Tùy thuộc vào trạng thái của các ca được chọn để hiển thị các hành động phù hợp
+ * Quản lý thông báo toast
+ * Created by: DatND (19/1/2026)
+ */
+const toast = useToast();
+
+// ========== REACTIVE STATE ==========
+/**
+ * Quản lý trạng thái modal chỉnh sửa ca làm việc
+ * Created by: DatND (16/1/2026)
+ */
+const dialogVisible = ref(false);
+const modalMode = ref<'add' | 'edit' | 'duplicate'>('add');
+const selectedShift = ref<Shift | undefined>(undefined);
+
+/**
+ * Quản lý trạng thái chọn ca làm việc trong bảng
+ * Created by: DatND (16/1/2026)
+ */
+const selectedShifts = ref<Shift[]>([]);
+const activeRowKey = ref<string | number | null>(null);
+
+/**
+ * Quản lý trạng thái xác nhận xóa
+ * Created by: DatND (19/1/2026)
+ */
+const showDeleteConfirm = ref(false);
+const shiftsToDelete = ref<Shift[]>([]);
+
+/**
+ * Lưu trữ tham số truy vấn cuối cùng để hỗ trợ làm mới
+ * Created by: DatND (18/1/2026)
+ */
+const lastQueryParams = ref<{
+    search?: string;
+    filters?: Record<string, FilterState>;
+    sorts?: SortStateItem[];
+    page?: number;
+    pageSize?: number;
+}>({});
+
+// ========== COMPUTED PROPERTIES ==========
+/**
+ * Tạo danh sách hành động hàng loạt dựa trên trạng thái ca được chọn
  * Created by: DatND (16/1/2026)
  */
 const batchActions = computed<BatchAction[]>(() => {
     const actions: BatchAction[] = [];
-
-    // 
     const hasInactive = selectedShifts.value.some(s => s.inactive);
     const hasActive = selectedShifts.value.some(s => !s.inactive);
 
-    // Show "Sử dụng" chỉ khi có shift đang ngừng sử dụng
     if (hasInactive) {
         actions.push({
             label: 'Sử dụng',
             icon: 'active',
             variant: 'success',
             shortkey: 'Active',
-            action: async (shifts: Shift[]) => {
-                try {
-                    const shiftIds = shifts.map(s => s.shiftId);
-                    await shiftService.updateInactive(shiftIds, false, true);
-                } catch (error) {
-                    console.error('Error activating shifts:', error);
-                }
-            }
+            action: (shifts: Shift[]) => handleUpdateInactive(shifts, false)
         });
     }
 
-    // Show "Ngừng sử dụng" chỉ khi có shift đang hoạt động
     if (hasActive) {
         actions.push({
             label: 'Ngừng sử dụng',
             icon: 'inactive',
             variant: 'danger',
             shortkey: 'Inactive',
-            action: async (shifts: Shift[]) => {
-                try {
-                    const shiftIds = shifts.map(s => s.shiftId);
-                    await shiftService.updateInactive(shiftIds, true, true);
-                } catch (error) {
-                    console.error('Error deactivating shifts:', error);
-                }
-            }
+            action: (shifts: Shift[]) => handleUpdateInactive(shifts, true)
         });
     }
 
-    // luôn hiển thị "Xóa"
     actions.push({
         label: 'Xóa',
         icon: 'trash',
         variant: 'danger',
         shortkey: 'Delete',
-        action: (shifts: Shift[]) => {
-            shiftsToDelete.value = shifts;
-            showDeleteConfirm.value = true;
-        }
+        action: (shifts: Shift[]) => openDeleteConfirm(shifts)
     });
 
     return actions;
 });
 
+// ========== HELPERS ==========
 /**
- * Mở modal với mode edit
- * Set selectedShift và modalMode, sau đó hiển thị modal
- * 
+ * Xác định trạng thái lưu và thông báo dựa trên chế độ modal
  * Created by: DatND (16/1/2026)
  */
-const openEditDialog = (shift: Shift) => {
+const getSaveStateAndMessage = (mode: 'add' | 'edit' | 'duplicate'): { state: 1 | 2 | 4; message: string } => {
+    const stateMap = {
+        add: { state: 1 as 1 | 2 | 4, message: 'Thêm Ca làm việc thành công' },
+        edit: { state: 2 as 1 | 2 | 4, message: 'Sửa Ca làm việc thành công' },
+        duplicate: { state: 4 as 1 | 2 | 4, message: 'Nhân bản Ca làm việc thành công' }
+    };
+    return stateMap[mode];
+};
+
+/**
+ * Xử lý lưu ca làm việc với các tham số chung
+ * Created by: DatND (16/1/2026)
+ */
+const saveShift = async (formData: ShiftFormData, mode: 'add' | 'edit' | 'duplicate'): Promise<Shift> => {
+    const { state, message } = getSaveStateAndMessage(mode);
+    const shiftData = convertFormDataToShift(formData, selectedShift.value);
+    const savedShift = await shiftService.save(shiftData, state, 'admin', true);
+    activeRowKey.value = savedShift.shiftId;
+    toast.success(message);
+    return savedShift;
+};
+
+// ========== HANDLERS - MODAL ==========
+/**
+ * Mở modal với chế độ và dữ liệu ca làm việc cụ thể
+ * Created by: DatND (16/1/2026)
+ */
+const openModal = (mode: 'add' | 'edit' | 'duplicate', shift?: Shift) => {
+    modalMode.value = mode;
     selectedShift.value = shift;
-    modalMode.value = 'edit';
     dialogVisible.value = true;
 };
 
+const openAddDialog = () => openModal('add');
+const openEditDialog = (shift: Shift) => openModal('edit', shift);
+const openDuplicateDialog = (shift: Shift) => openModal('duplicate', shift);
+
+// ========== HANDLERS - SAVE ==========
 /**
- * Mở modal với mode duplicate
- * Set selectedShift và modalMode, sau đó hiển thị modal
- * 
+ * Xử lý lưu ca làm việc và đóng modal
  * Created by: DatND (16/1/2026)
  */
-const openDuplicateDialog = (shift: Shift) => {
-    selectedShift.value = shift;
-    modalMode.value = 'duplicate';
-    dialogVisible.value = true;
+const handleSave = async (formData: ShiftFormData, mode: 'add' | 'edit' | 'duplicate') => {
+    try {
+        await saveShift(formData, mode);
+        dialogVisible.value = false;
+    } catch (error) {
+        console.error('Error saving shift:', error);
+        toast.error('Lưu Ca làm việc thất bại. Vui lòng thử lại.');
+    }
 };
 
 /**
- * Mở modal để thêm mới shift
- * Reset selectedShift và set modalMode về add, sau đó hiển thị modal
- * 
+ * Xử lý lưu ca làm việc và chuyển sang chế độ thêm mới
  * Created by: DatND (16/1/2026)
  */
-const openAddDialog = () => {
-    selectedShift.value = undefined;
-    modalMode.value = 'add';
-    dialogVisible.value = true;
+const handleSaveAndAdd = async (formData: ShiftFormData, mode: 'add' | 'edit' | 'duplicate') => {
+    try {
+        await saveShift(formData, mode);
+        selectedShift.value = undefined;
+        modalMode.value = 'add';
+    } catch (error) {
+        console.error('Error saving shift:', error);
+        toast.error('Thêm Ca làm việc thất bại. Vui lòng thử lại.');
+        selectedShift.value = undefined;
+        modalMode.value = 'add';
+    }
+};
+
+// ========== HANDLERS - DELETE ==========
+/**
+ * Mở dialog xác nhận xóa ca làm việc
+ * Created by: DatND (19/1/2026)
+ */
+const openDeleteConfirm = (shifts: Shift[]) => {
+    shiftsToDelete.value = shifts;
+    showDeleteConfirm.value = true;
 };
 
 /**
- * Xử lý sự kiện edit shift từ table
- * Gọi openEditDialog với shift được chọn
- * 
+ * Xử lý xác nhận xóa ca làm việc
+ * Created by: DatND (19/1/2026)
+ */
+const handleConfirmDelete = async () => {
+    try {
+       var result = await shiftService.deleteShifts(shiftsToDelete.value, true);
+       if((result && (result as any).triggerRefresh)){
+            await handleRefresh();
+         }
+        showDeleteConfirm.value = false;
+    } catch (error) {
+        console.error('Error deleting shifts:', error);
+        toast.error('Xóa Ca làm việc thất bại. Vui lòng thử lại.');
+    }
+};
+
+// ========== HANDLERS - STATUS ==========
+/**
+ * Xử lý cập nhật trạng thái sử dụng ca làm việc
  * Created by: DatND (16/1/2026)
  */
-const handleEdit = (shift: Shift) => {
-    openEditDialog(shift);
+const handleUpdateInactive = async (shifts: Shift[], inactive: boolean) => {
+    try {
+        const shiftIds = shifts.map(s => s.shiftId);
+        await shiftService.updateInactive(shiftIds, inactive, true);
+    } catch (error) {
+        console.error('Error updating shift status:', error);
+    }
 };
 
+// ========== HANDLERS - DATA ==========
 /**
- * Xử lý làm mới dữ liệu, gọi lại API với params hiện tại
- * 
- * Created by: DatND (18/1/2026)
- */
-const handleRefresh = async () => {
-    await handleDataChange(lastQueryParams.value);
-};
-
-/**
- * Xử lý thay đổi dữ liệu khi filter, sort, pagination, hoặc search thay đổi
- * Gọi shiftService.query với params và cập nhật store
- * 
+ * Xử lý thay đổi dữ liệu bảng (tìm kiếm, lọc, sắp xếp, phân trang)
  * Created by: DatND (18/1/2026)
  */
 const handleDataChange = async (params: {
@@ -299,134 +351,38 @@ const handleDataChange = async (params: {
     pageSize?: number;
 }) => {
     try {
-        // Lưu params để dùng cho refresh
         lastQueryParams.value = params;
-
-        // Gọi truy vấn dữ liệu với các tham số hiện tại
         await shiftService.query({
             page: params.page || 1,
             pageSize: params.pageSize || 20,
             search: params.search,
             filters: params.filters,
             sorts: params.sorts
-        }, true); // Lưu vào store
+        }, true, columns);
     } catch (error) {
         console.error('Error fetching shifts:', error);
     }
 };
 
 /**
- * Xử lý sự kiện Save từ ShiftModal
- * - Mode add: Tạo shift mới
- * - Mode edit: Cập nhật shift hiện tại
- * - Mode duplicate: Tạo shift mới từ dữ liệu duplicate
- * Đóng modal sau khi xử lý
- * 
- * Created by: DatND (16/1/2026)
+ * Xử lý làm mới dữ liệu bảng
+ * Created by: DatND (18/1/2026)
  */
-const handleSave = async (formData: ShiftFormData, mode: 'add' | 'edit' | 'duplicate') => {
-    try {
-        let state: 1 | 2 | 4;
-        let successMessage = '';
-
-        if (mode === 'add') {
-            state = 1; // Add
-            successMessage = 'Thêm Ca làm việc thành công';
-        } else if (mode === 'edit') {
-            state = 2; // Update
-            successMessage = 'Sửa Ca làm việc thành công';
-        } else {
-            state = 4; // Duplicate
-            successMessage = 'Nhân bản Ca làm việc thành công';
-        }
-
-        // Convert form data to Shift format
-        const shiftData = convertFormDataToShift(formData, selectedShift.value);
-
-        // Call API to save shift (service will update store automatically)
-        var savedShift = await shiftService.save(shiftData, state, 'admin', true);
-        activeRowKey.value = savedShift.shiftId;
-        toast.success(successMessage);
-        dialogVisible.value = false;
-    } catch (error) {
-        console.error('Error saving shift:', error);
-        toast.error('Lưu Ca làm việc thất bại. Vui lòng thử lại.');
-    }
+const handleRefresh = async () => {
+    await handleDataChange(lastQueryParams.value);
 };
 
-/**
- * Xử lý sự kiện Save và Thêm từ ShiftModal
- * Lưu shift hiện tại và giữ modal mở để thêm mới
- * 
- * Created by: DatND (16/1/2026)
- */
-const handleSaveAndAdd = async (formData: ShiftFormData, mode: 'add' | 'edit' | 'duplicate') => {
-    try {
-        let state: 1 | 2 | 4;
-        let successMessage = '';
-
-        if (mode === 'add') {
-            state = 1; // Add
-            successMessage = 'Thêm Ca làm việc thành công';
-        } else if (mode === 'edit') {
-            state = 2; // Update
-            successMessage = 'Sửa Ca làm việc thành công';
-        } else {
-            state = 4; // Duplicate
-            successMessage = 'Nhân bản Ca làm việc thành công';
-        }
-        // Convert form data to Shift format
-        const shiftData = convertFormDataToShift(formData, selectedShift.value);
-
-        // Call API to save shift (service will update store automatically)
-        var savedShift = await shiftService.save(shiftData, state, 'admin', true);
-        activeRowKey.value = savedShift.shiftId;
-        // Convert form data to Shift format
-        toast.success('Thêm Ca làm việc thành công');
-
-        // Reset selected shift để form trở về trạng thái thêm mới
-        selectedShift.value = undefined;
-        modalMode.value = 'add';
-    } catch (error) {
-        console.error('Error saving shift:', error);
-        toast.error('Thêm Ca làm việc thất bại. Vui lòng thử lại.');
-        // Reset selected shift để form trở về trạng thái thêm mới
-        selectedShift.value = undefined;
-        modalMode.value = 'add';
-    }
-};
-
-const handleBatchAction = (action: BatchAction, selectedItems: Shift[]) => {
-    action.action(selectedItems);
-};
-
-const handleSelectionChange = (items: Shift[]) => {
-    selectedShifts.value = items;
-};
-
-/**
- * Xử lý xác nhận xóa ca làm việc
- * 
- * Created by: DatND (19/1/2026)
- */
-const handleConfirmDelete = async () => {
-    try {
-        const count = shiftsToDelete.value.length;
-        await shiftService.deleteShifts(shiftsToDelete.value, true);
-        showDeleteConfirm.value = false;
-    } catch (error) {
-        console.error('Error deleting shifts:', error);
-        toast.error('Xóa Ca làm việc thất bại. Vui lòng thử lại.');
-    }
-};
+// ========== HANDLERS - TABLE EVENTS ==========
+const handleEdit = (shift: Shift) => openEditDialog(shift);
+const handleSelectionChange = (items: Shift[]) => { selectedShifts.value = items; };
+const handleBatchAction = (action: BatchAction, selectedItems: Shift[]) => action.action(selectedItems);
 </script>
 
 <template>
     <!-- Delete Confirmation Dialog -->
-    <MISAConfirmDialog v-model:visible="showDeleteConfirm" title="Xóa Ca làm việc" message="{{ shiftsToDelete.length > 1 ?
-     'Các Ca làm việc sau khi bị xóa sẽ không thể khôi phục. Bạn có muốn tiếp tục xóa không?' 
-    : 'Ca làm việc ' + (shiftsToDelete[0]?.shiftName || '') + ' sau khi bị xóa sẽ không thể khôi phục. Bạn có muốn tiếp tục xóa không?' 
-    }}" 
+    <MISAConfirmDialog v-model:visible="showDeleteConfirm" title="Xóa Ca làm việc" :message="shiftsToDelete.length > 1 ?
+     'Các ca làm việc sau khi bị xóa sẽ không thể khôi phục. Bạn có muốn tiếp tục xóa không?' 
+    : 'Ca làm việc ' + (shiftsToDelete[0]?.shiftName || '') + ' sau khi bị xóa sẽ không thể khôi phục. Bạn có muốn tiếp tục xóa không?' "
     accept-label="Xóa" accept-class="ms-button btn-solid-danger" 
     reject-label="Hủy" icon="icon-warning" @accept="handleConfirmDelete" />
 

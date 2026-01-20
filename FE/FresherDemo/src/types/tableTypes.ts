@@ -1,5 +1,5 @@
 import type { VNode } from 'vue';
-import type { FilterState, FilterOperator } from '../composables/table/useTableFiltering';
+import type { FilterState, FilterOperator, FilterType } from '../composables/table/useTableFiltering';
 
 export interface TableColumn {
     field: string;
@@ -8,10 +8,13 @@ export interface TableColumn {
     width?: string;
     align?: 'left' | 'center' | 'right';
     formatter?: (value: any, row?: any) => string;
-    filterType?: 'text' | 'number' | 'time'| 'date';
+    filterType?: FilterType;
+    filterOptions?: Array<{ label: string; value: any }>;
     pinnable?: boolean;
     cellRender?: (ctx: { value: any; item: any; column: TableColumn; rowIndex: number }) => VNode;
     headerRender?: (ctx: { column: TableColumn }) => VNode;
+    backendField?: string; // Map frontend field to different backend field name
+    valueTransformer?: (value: any) => any; // Transform filter value before sending to backend
 }
 
 export interface BatchAction {

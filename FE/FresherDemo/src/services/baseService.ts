@@ -51,10 +51,12 @@ export interface QueryParams {
 /**
  * Chuyển đổi FilterState từ frontend sang định dạng backend filter string
  * Định dạng: [["field","operator",value],"and",["field2","operator2",value2]]
+ * Hỗ trợ backendField mapping và valueTransformer từ column definition
  * Created by: DatND (18/1/2026)
  */
 export function transformFiltersToBackend(
-  filters: Record<string, FilterState>
+  filters: Record<string, FilterState>,
+  columns?: any[]
 ): string | null {
   const filterEntries = Object.entries(filters);
   if (filterEntries.length === 0) return null;
@@ -104,10 +106,16 @@ export function transformFiltersToBackend(
       case 'notNull':
         backendOperator = 'notnull';
         break;
+      case 'selected':
+        backendOperator = '=';
+        break;
       default:
         backendOperator = 'contains';
     }
 
+    // Tìm column definition để lấy backendField và valueTransformer
+    const column = columns?.find(col => col.field === field);
+    
     // Chuyển đổi giá trị dựa trên type
     let transformedValue: any = value;
     
@@ -120,9 +128,14 @@ export function transformFiltersToBackend(
       // Giữ nguyên string cho date/time
       transformedValue = value;
     }
+    
+    // Áp dụng valueTransformer nếu có
+    if (column?.valueTransformer) {
+      transformedValue = column.valueTransformer(transformedValue);
+    }
 
-    // Chuyển đổi field name từ camelCase sang PascalCase
-    const pascalField = field.charAt(0).toUpperCase() + field.slice(1);
+    // Chuyển đổi field name: Ưu tiên backendField, sau đó camelCase sang PascalCase
+    const pascalField = column?.backendField || (field.charAt(0).toUpperCase() + field.slice(1));
 
     // Thêm condition
     if (index > 0) {
@@ -191,7 +204,8 @@ export function buildSearchCustomFilter(
 export function buildQueryDTO(
   params: QueryParams,
   columns: string[],
-  stringColumns?: string[]
+  stringColumns?: string[],
+  columnDefinitions?: any[]
 ): QueryDTO {
   const {
     page = 1,
@@ -212,7 +226,7 @@ export function buildQueryDTO(
     pageSize: pageSize,
     columns: columns.join(','),
     columnsSummary: null,
-    filter: transformFiltersToBackend(filters),
+    filter: transformFiltersToBackend(filters, columnDefinitions),
     quickSearch: null, // Search is handled via customFilter instead
     sort: transformSortsToBackend(sorts),
     customParam: Object.keys(customParams).length > 0 ? customParams : null,
